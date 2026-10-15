@@ -14,6 +14,8 @@ while running:
             running = False
 
     screen.fill((30, 30, 30))
+    pygame.draw.rect(screen, (0, 150, 255), (100, 100, 80, 50))
+    
     pygame.display.flip()
 
 pygame.quit()
