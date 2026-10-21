@@ -1,24 +1,261 @@
 #全体の起動、各モジュールの連携
 
+import csv
+import json
+import os
+import math
 import pygame
 
 from simulation.car import Car
 from simulation.environment import Environment
 from simulation.sensor import Sensor
 from ai.neural_network import NeuralNetwork
+from evolution.genetic_algorithm import GeneticAlgorithm
+from evolution.fitness import calculate_fitness
+
 
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
 FPS = 60
 
+POPULATION_SIZE = 20
+MAX_SURVIVAL_TIME = 15.0
+SIMULATION_SPEEDS = [1, 2, 4, 8, 16]
 
-def create_car(environment):
-    car = Car(
-        environment.start_x,
-        environment.start_y
-    )
+CAR_COLORS = [
+    (255, 70, 70), (70, 180, 255), (255, 210, 50),
+    (70, 230, 120), (220, 100, 255), (255, 150, 60),
+    (80, 240, 220), (255, 120, 190), (180, 220, 80),
+    (180, 180, 255), (255, 100, 100), (100, 255, 170),
+    (255, 180, 80), (130, 160, 255), (230, 230, 100),
+    (100, 220, 220), (220, 130, 255), (150, 255, 100),
+    (255, 140, 140), (200, 200, 200),
+]
+
+
+def create_individual(environment, genome, index):
+    car = Car(environment.start_x, environment.start_y)
     car.angle = environment.start_angle
-    return car
+    car.color = CAR_COLORS[index % len(CAR_COLORS)]
+
+    sensor = Sensor(max_distance=150)
+    brain = NeuralNetwork()
+    brain.set_weights(genome.weights)
+
+    return {
+        "car": car,
+        "sensor": sensor,
+        "brain": brain,
+        "elapsed_time": 0.0,
+        "distance": 0.0,
+        "progress": 0.0,
+        "previous_progress": environment.get_track_progress(
+            car.x, car.y
+        ),
+        "laps": 0,
+        "lap_start_time": 0.0,
+        "lap_start_distance": 0.0,
+        "lap_times": [],
+        "lap_distances": [],
+        "crashed": False,
+        "finished": False,
+        "fitness": None,
+    }
+
+
+def update_individual(individual, environment, dt):
+    if individual["finished"]:
+        return
+
+    car = individual["car"]
+    sensor = individual["sensor"]
+    brain = individual["brain"]
+
+    sensor.update(car, environment)
+    output = brain.predict(sensor.distances)
+
+    old_x, old_y = car.x, car.y
+
+    car.update_ai(
+        dt,
+        float(output[0]),
+        float(output[1]),
+        SCREEN_WIDTH,
+        SCREEN_HEIGHT,
+    )
+
+    moved_distance = math.hypot(
+        car.x - old_x,
+        car.y - old_y,
+    )
+
+    individual["distance"] += moved_distance
+    individual["elapsed_time"] += dt
+
+    current_progress = environment.get_track_progress(
+        car.x, car.y
+    )
+
+    delta = current_progress - individual["previous_progress"]
+
+    if delta < -environment.track_length / 2:
+        delta += environment.track_length
+    elif delta > environment.track_length / 2:
+        delta -= environment.track_length
+
+    if 0 <= delta <= 30:
+        individual["progress"] += delta
+
+    individual["previous_progress"] = current_progress
+
+    # 周回数が増えたら、その周のタイムと距離を記録する
+    new_laps = int(
+        individual["progress"] // environment.track_length
+    )
+
+    while new_laps > individual["laps"]:
+        individual["lap_times"].append(
+            individual["elapsed_time"] - individual["lap_start_time"]
+        )
+
+        individual["lap_distances"].append(
+            individual["distance"] - individual["lap_start_distance"]
+        )
+
+        individual["lap_start_time"] = individual["elapsed_time"]
+        individual["lap_start_distance"] = individual["distance"]
+        individual["laps"] += 1
+
+        lap_number = individual["laps"]
+        lap_time = individual["lap_times"][-1]
+        lap_distance = individual["lap_distances"][-1]
+
+        print(
+            f"AI 周回達成: {lap_number}周目 | "
+            f"タイム: {lap_time:.2f}秒 | "
+            f"距離: {lap_distance:.1f}"
+        )
+
+    if not environment.is_on_track(car.x, car.y):
+        individual["crashed"] = True
+        individual["finished"] = True
+    elif individual["elapsed_time"] >= MAX_SURVIVAL_TIME:
+        individual["finished"] = True
+
+    if individual["finished"]:
+        individual["fitness"] = calculate_fitness(
+            distance=individual["distance"],
+            survival_time=individual["elapsed_time"],
+            completed=(individual["laps"] > 0),
+            progress=individual["progress"],
+            laps=individual["laps"],
+            lap_times=individual["lap_times"],
+            lap_distances=individual["lap_distances"],
+            track_length=environment.track_length,
+        )
+
+
+def draw_simulation(
+    screen,
+    font,
+    environment,
+    individuals,
+    generation,
+    show_sensors,
+    simulation_speed,
+):
+    environment.draw(screen)
+
+    for index, individual in enumerate(individuals):
+        car = individual["car"]
+
+        if show_sensors and not individual["finished"]:
+            individual["sensor"].draw(screen, car)
+
+        car.draw(screen)
+
+        label = font.render(
+            str(index + 1), True, (255, 255, 255)
+        )
+        screen.blit(
+            label,
+            (int(car.x) - 5, int(car.y) - 30),
+        )
+
+    active_count = sum(
+        not individual["finished"] for individual in individuals
+    )
+    finished_count = POPULATION_SIZE - active_count
+
+    best_lap = min(
+        (
+            lap_time
+            for individual in individuals
+            for lap_time in individual["lap_times"]
+        ),
+        default=None,
+    )
+
+    screen.blit(
+        font.render(f"Generation: {generation}", True, (255, 255, 255)),
+        (20, 15),
+    )
+    screen.blit(
+        font.render(
+            f"Running: {active_count}/{POPULATION_SIZE}",
+            True, (255, 255, 255),
+        ),
+        (20, 45),
+    )
+    screen.blit(
+        font.render(
+            f"Finished: {finished_count}/{POPULATION_SIZE}",
+            True, (255, 255, 255),
+        ),
+        (20, 75),
+    )
+    screen.blit(
+        font.render(
+            f"Sensors: {'ON' if show_sensors else 'OFF'} [S]",
+            True, (255, 255, 255),
+        ),
+        (20, 105),
+    )
+
+    if best_lap is not None:
+        screen.blit(
+            font.render(
+                f"Best lap: {best_lap:.2f}s",
+                True, (255, 255, 255),
+            ),
+            (20, 135),
+        )
+        
+        # 速度変更ボタン
+    pygame.draw.rect(screen, (70, 70, 70), (20, 155, 40, 40))
+    pygame.draw.rect(screen, (70, 70, 70), (120, 155, 40, 40))
+
+    pygame.draw.rect(screen, (230, 230, 230), (20, 155, 40, 40), 2)
+    pygame.draw.rect(screen, (230, 230, 230), (120, 155, 40, 40), 2)
+
+    screen.blit(
+        font.render("-", True, (255, 255, 255)),
+        (35, 163),
+    )
+    screen.blit(
+        font.render("+", True, (255, 255, 255)),
+        (132, 163),
+    )
+    screen.blit(
+        font.render(
+            f"Speed: {simulation_speed}x",
+            True,
+            (255, 255, 255),
+        ),
+        (175, 163),
+    )
+
+    pygame.display.flip()
 
 
 def main():
@@ -27,90 +264,152 @@ def main():
     screen = pygame.display.set_mode(
         (SCREEN_WIDTH, SCREEN_HEIGHT)
     )
-    pygame.display.set_caption("3E Car Simulator - AI")
+    pygame.display.set_caption(
+        "3E Car Simulator - Parallel Evolution"
+    )
 
     clock = pygame.time.Clock()
-    font = pygame.font.Font(None, 28)
+    font = pygame.font.Font(None, 26)
 
     environment = Environment()
-    car = create_car(environment)
-    sensor = Sensor(max_distance=150)
-    brain = NeuralNetwork()
+    ga = GeneticAlgorithm(population_size=POPULATION_SIZE)
 
-    crashed = False
+    os.makedirs("saved_models", exist_ok=True)
+
+    history_path = "saved_models/training_history.csv"
+    best_path = "saved_models/best_genome.json"
+
+    best_fitness_ever = float("-inf")
+    generation = 1
+    show_sensors = True
+    speed_index = 2  # 初期速度は4x
     running = True
-    survival_time = 0.0
 
     while running:
-        dt = clock.tick(FPS) / 1000.0
+        individuals = [
+            create_individual(environment, genome, index)
+            for index, genome in enumerate(ga.population)
+        ]
 
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
+        print(f"\n世代 {generation} の走行を開始します。")
 
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_r:
-                    car = create_car(environment)
-                    crashed = False
-                    survival_time = 0.0
+        while running and any(
+            not individual["finished"] for individual in individuals
+        ):
+            real_dt = clock.tick(FPS) / 1000.0
 
-        if not crashed:
-            # 1. センサーで周囲の距離を測定
-            sensor.update(car, environment)
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
 
-            # 2. センサー値からAIが操作量を計算
-            output = brain.predict(sensor.distances)
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_s:
+                        show_sensors = not show_sensors
 
-            steering = float(output[0])
-            throttle = float(output[1])
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == 1:
+                        mouse_x, mouse_y = event.pos
 
-            # 3. AIの出力で車を操作
-            car.update_ai(
-                dt,
-                steering,
-                throttle,
-                SCREEN_WIDTH,
-                SCREEN_HEIGHT
+                    # 速度を下げるボタン
+                    if 20 <= mouse_x <= 60 and 155 <= mouse_y <= 195:
+                        speed_index = max(0, speed_index - 1)
+
+                    # 速度を上げるボタン
+                    elif 120 <= mouse_x <= 160 and 155 <= mouse_y <= 195:
+                        speed_index = min(
+                            len(SIMULATION_SPEEDS) - 1,
+                            speed_index + 1,
+                        )
+                    
+            if not running:
+                break
+
+            simulation_speed = SIMULATION_SPEEDS[speed_index]
+            dt = min(real_dt * simulation_speed, 0.1)
+
+            for individual in individuals:
+                update_individual(individual, environment, dt)
+
+            draw_simulation(
+                screen,
+                font,
+                environment,
+                individuals,
+                generation,
+                show_sensors,
+                simulation_speed,
             )
 
-            survival_time += dt
+        if not running:
+            break
 
-            # 4. コース外に出たか確認
-            if not environment.is_on_track(
-                car.x, car.y
-            ):
-                crashed = True
+        fitness_scores = [
+            individual["fitness"] for individual in individuals
+        ]
+        ga.evaluate(fitness_scores)
 
-        # 停止中もセンサーを描画できるよう更新
-        sensor.update(car, environment)
-
-        # 描画
-        environment.draw(screen)
-        sensor.draw(screen, car)
-        car.draw(screen)
-
-        if crashed:
-            status = "CRASHED! Press R to restart"
-            color = (255, 70, 70)
-        else:
-            status = "AI DRIVING"
-            color = (255, 255, 255)
-
-        screen.blit(
-            font.render(status, True, color),
-            (20, 15)
+        best_index = max(
+            range(len(individuals)),
+            key=lambda i: fitness_scores[i],
         )
 
-        screen.blit(
-            font.render(
-                f"Time: {survival_time:.1f}s",
-                True,
-                (255, 255, 255)
-            ),
-            (20, 45)
-        )
+        best_individual = individuals[best_index]
+        average_fitness = sum(fitness_scores) / len(fitness_scores)
 
-        pygame.display.flip()
+        print(f"世代 {generation} の評価終了")
+        print(f"最高評価: {fitness_scores[best_index]:.2f}")
+        print(f"平均評価: {average_fitness:.2f}")
+        print(f"最高評価のAI: {best_index + 1}")
+        print(f"最高進捗: {best_individual['progress']:.1f}")
+        print(f"周回数: {best_individual['laps']}")
+
+        if best_individual["lap_times"]:
+            print(
+                f"最速周回: "
+                f"{min(best_individual['lap_times']):.2f}秒"
+            )
+
+        file_exists = os.path.exists(history_path)
+
+        with open(
+            history_path, "a", newline="", encoding="utf-8-sig"
+        ) as file:
+            writer = csv.writer(file)
+
+            if not file_exists:
+                writer.writerow([
+                    "generation",
+                    "best_fitness",
+                    "average_fitness",
+                ])
+
+            writer.writerow([
+                generation,
+                fitness_scores[best_index],
+                average_fitness,
+            ])
+
+        if fitness_scores[best_index] > best_fitness_ever:
+            best_fitness_ever = fitness_scores[best_index]
+
+            with open(best_path, "w", encoding="utf-8") as file:
+                json.dump(
+                    {
+                        "generation": generation,
+                        "fitness": best_fitness_ever,
+                        "weights": ga.population[
+                            best_index
+                        ].weights.tolist(),
+                    },
+                    file,
+                    indent=2,
+                )
+
+            print("過去最高のAIを保存しました。")
+
+        ga.evolve()
+        generation += 1
+        print("次世代を生成しました。")
 
     pygame.quit()
 
