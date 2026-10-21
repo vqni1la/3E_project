@@ -1,44 +1,58 @@
 #全体の起動、各モジュールの連携
 import pygame
+from simulation.car import Car
 
-pygame.init()
+# 画面設定
+SCREEN_WIDTH = 800
+SCREEN_HEIGHT = 600
+FPS = 60
 
-map_width = 1800
-map_height = 600
+def main():
+    pygame.init()
 
-screen = pygame.display.set_mode((map_width, map_height))
-pygame.display.set_caption("3E Car Simulator")
+    screen = pygame.display.set_mode(
+        (SCREEN_WIDTH, SCREEN_HEIGHT)
+    )
+    pygame.display.set_caption("3E Car Simulator")
 
-car = pygame.Rect(0, 0, 80, 50)
-clock = pygame.time.Clock()
-speed = 600
-angle = 0
+    clock = pygame.time.Clock()
 
-running = True
+    # 車を画面中央に配置
+    car = Car(
+        SCREEN_WIDTH / 2,
+        SCREEN_HEIGHT / 2
+    )
 
-while running:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
+    running = True
 
-    dt = clock.tick(60) / 1000
-    distance = speed * dt
-    
-    key = pygame.key.get_pressed()
-    if key[pygame.K_d] and car.right + distance <= map_width:
-            car.move_ip(distance,0)
-            
-    if key[pygame.K_a] and car.left - distance >= 0:
-        car.move_ip(-distance,0)
-        
-    if key[pygame.K_w] and car.top - distance >= 0:
-            car.move_ip(0,-distance)
-            
-    if key[pygame.K_s] and car.bottom + distance <= map_height:
-            car.move_ip(0,distance)
-    
-    screen.fill((30, 30, 30))
-    pygame.draw.rect(screen, (0, 150, 255), car)
-    pygame.display.flip()
+    while running:
+        # 1フレームにかかった時間（秒）
+        dt = clock.tick(FPS) / 1000.0
 
-pygame.quit()
+        # イベント処理
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+        # キー入力を取得
+        keys = pygame.key.get_pressed()
+
+        # 車を更新
+        car.update(
+            dt,
+            keys,
+            SCREEN_WIDTH,
+            SCREEN_HEIGHT
+        )
+
+        # 画面描画
+        screen.fill((240, 240, 240))
+        car.draw(screen)
+
+        pygame.display.flip()
+
+    pygame.quit()
+
+
+if __name__ == "__main__":
+    main()
