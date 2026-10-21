@@ -9,58 +9,68 @@ class Car:
         self.x = float(x)
         self.y = float(y)
 
-        # 車の向き（度）
         self.angle = 0.0
-
         self.speed = 200.0
         self.turn_speed = 180.0
 
         self.width = 40
         self.height = 24
-
         self.color = (0, 100, 255)
 
     def update(self, dt, keys, screen_width, screen_height):
-        # A / D で旋回
+        # 手動操作：A/Dで旋回
+        steering = 0
+
         if keys[pygame.K_a]:
-            self.angle -= self.turn_speed * dt
+            steering -= 1
 
         if keys[pygame.K_d]:
-            self.angle += self.turn_speed * dt
+            steering += 1
 
-        # 角度を 0～360 度に収める
-        self.angle %= 360
-
-        # 度数法からラジアンに変換
-        rad = math.radians(self.angle)
-
-        # W / S で前進・後退
-        move = 0
+        # W/Sで速度指令
+        throttle = 0
 
         if keys[pygame.K_w]:
-            move += 1
+            throttle += 1
 
         if keys[pygame.K_s]:
-            move -= 1
+            throttle -= 1
 
-        self.x += math.cos(rad) * self.speed * move * dt
-        self.y += math.sin(rad) * self.speed * move * dt
+        self.update_ai(
+            dt, steering, throttle,
+            screen_width, screen_height
+        )
 
-        # 画面端から出ないようにする
+    def update_ai(
+        self, dt, steering, throttle,
+        screen_width, screen_height
+    ):
+        # 操舵・速度指令を -1～1 に制限
+        steering = max(-1.0, min(1.0, float(steering)))
+        throttle = max(-1.0, min(1.0, float(throttle)))
+
+        # 操舵量に応じて旋回
+        self.angle += steering * self.turn_speed * dt
+        self.angle %= 360
+
+        # 進行方向へ移動
+        rad = math.radians(self.angle)
+        distance = throttle * self.speed * dt
+
+        self.x += math.cos(rad) * distance
+        self.y += math.sin(rad) * distance
+
+        # 画面外に出ないように制限
         margin = math.hypot(self.width, self.height) / 2
 
         self.x = max(
-            margin,
-            min(screen_width - margin, self.x)
+            margin, min(screen_width - margin, self.x)
         )
-
         self.y = max(
-            margin,
-            min(screen_height - margin, self.y)
+            margin, min(screen_height - margin, self.y)
         )
 
     def draw(self, screen):
-        # 車の画像に相当する四角形を作る
         car_surface = pygame.Surface(
             (self.width, self.height),
             pygame.SRCALPHA
@@ -72,13 +82,10 @@ class Car:
             (0, 0, self.width, self.height)
         )
 
-        # 車の向きに合わせて回転
         rotated = pygame.transform.rotate(
-            car_surface,
-            -self.angle
+            car_surface, -self.angle
         )
 
-        # 車の中心を (x, y) に合わせて描画
         rect = rotated.get_rect(
             center=(round(self.x), round(self.y))
         )
