@@ -3,6 +3,7 @@
 import pygame
 from simulation.car import Car
 from simulation.environment import Environment
+from simulation.sensor import Sensor
 
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
@@ -25,6 +26,9 @@ def main():
         environment.start_x,
         environment.start_y
     )
+    
+    sensor = Sensor(max_distance=150)
+    
     car.angle = environment.start_angle
 
     running = True
@@ -63,8 +67,12 @@ def main():
             if not environment.is_on_track(car.x, car.y):
                 crashed = True
 
+        # センサーを更新
+        sensor.update(car, environment)
+
         # 描画
         environment.draw(screen)
+        sensor.draw(screen, car)
         car.draw(screen)
 
         if crashed:
