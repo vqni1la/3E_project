@@ -12,7 +12,11 @@ from simulation.sensor import Sensor
 from ai.neural_network import NeuralNetwork
 from evolution.genetic_algorithm import GeneticAlgorithm
 from evolution.fitness import calculate_fitness
-from simulation.renderer import draw_simulation
+from simulation.renderer import (
+    draw_simulation,
+    SimulationDashboard,
+    SimulationSettings,
+)
 from config.settings import (
     SCREEN_WIDTH,
     SCREEN_HEIGHT,
@@ -181,6 +185,11 @@ def main():
 
     clock = pygame.time.Clock()
     font = pygame.font.Font(None, 26)
+    dashboard = SimulationDashboard()
+    settings = SimulationSettings(
+    speed_index=DEFAULT_SPEED_INDEX,
+    speed_values=SIMULATION_SPEEDS,
+)
 
     environment = Environment()
     ga = GeneticAlgorithm(population_size=POPULATION_SIZE)
@@ -216,26 +225,13 @@ def main():
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_s:
                         show_sensors = not show_sensors
-
-                elif event.type == pygame.MOUSEBUTTONDOWN:
-                    if event.button == 1:
-                        mouse_x, mouse_y = event.pos
-
-                    # 速度を下げるボタン
-                    if 20 <= mouse_x <= 60 and 155 <= mouse_y <= 195:
-                        speed_index = max(0, speed_index - 1)
-
-                    # 速度を上げるボタン
-                    elif 120 <= mouse_x <= 160 and 155 <= mouse_y <= 195:
-                        speed_index = min(
-                            len(SIMULATION_SPEEDS) - 1,
-                            speed_index + 1,
-                        )
                     
             if not running:
                 break
 
+            speed_index = settings.get_speed_index()
             simulation_speed = SIMULATION_SPEEDS[speed_index]
+            
             dt = min(real_dt * simulation_speed, 0.1)
 
             for individual in individuals:
@@ -250,6 +246,16 @@ def main():
                 show_sensors,
                 simulation_speed,
             )
+            
+            dashboard.update_info(
+             generation,
+             individuals,
+             show_sensors,
+             simulation_speed,
+            )
+
+            if not dashboard.is_open:
+                running = False
 
         if not running:
             break
@@ -321,6 +327,15 @@ def main():
         ga.evolve()
         generation += 1
         print("次世代を生成しました。")
+
+    if dashboard.is_open:
+        dashboard.close()
+        
+    if settings.is_open:
+        settings.close()
+        
+    if not dashboard.is_open or not settings.is_open:
+        running = False
 
     pygame.quit()
 
