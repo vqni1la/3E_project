@@ -31,15 +31,6 @@ from config.settings import (
     TRAINING_HISTORY_PATH,
 )
 
-
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 600
-FPS = 60
-
-POPULATION_SIZE = 20
-MAX_SURVIVAL_TIME = 15.0
-SIMULATION_SPEEDS = [1, 2, 4, 8, 16]
-
 CAR_COLORS = [
     (255, 70, 70), (70, 180, 255), (255, 210, 50),
     (70, 230, 120), (220, 100, 255), (255, 150, 60),
