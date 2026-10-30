@@ -16,6 +16,8 @@ class Car:
         self.width = 40
         self.height = 24
         self.color = (0, 100, 255)
+        
+        self.track_width = 24.0
 
     def update(self, dt, keys, screen_width, screen_height):
         # 手動操作：A/Dで旋回
