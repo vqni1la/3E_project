@@ -372,8 +372,8 @@ def main():
 
     environment = Environment()
     
-    # デフォルトのコースをステージ4に設定
-    environment.set_course(3)
+    # デフォルトのコースをステージ5に設定
+    environment.set_course(4)
 
     pygame.display.set_caption(
         f"3E Car Simulator - {environment.course_name}"
