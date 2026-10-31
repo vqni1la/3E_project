@@ -36,7 +36,8 @@ AIの走行が終わったら、行動を評価してあげて適応度を計算
 センサー : 赤外線センサー
 
 管理者用
-python car_simulator.py : 実行     <---     下のターミナルにこれを打ち込んで実行(simulation settings と simulation statisticsをいい感じの位置に動かしてね)
+python car_simulator.py : 実行     <---     下のターミナルにこれを打ち込んで実行(simulation settings と simulation statisticsをいい感じの位置に動かしてください)
 ESC :                   : 終了
 
 進化がうまくいかなければ、ステージ4か5でリセットする
+定期的にReset Learningで学習リセットしてください
