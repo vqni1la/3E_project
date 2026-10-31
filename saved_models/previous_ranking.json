@@ -1,5 +1,21 @@
 {
-  "generation": 3,
+  "generation": 11,
   "course": "Chicane",
-  "rankings": []
+  "rankings": [
+    {
+      "rank": 1,
+      "number": 9,
+      "time": 20.291999999999955
+    },
+    {
+      "rank": 2,
+      "number": 7,
+      "time": 28.3999999999999
+    },
+    {
+      "rank": 3,
+      "number": 18,
+      "time": 28.7879999999999
+    }
+  ]
 }

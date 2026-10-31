@@ -41,3 +41,4 @@ ESC :                   : 終了
 
 進化がうまくいかなければ、ステージ4か5でリセットする
 定期的にReset Learningで学習リセットしてください
+simulation statisticsの generation が50より大きくなってもAIが賢くない場合はreset Learningをしてください
